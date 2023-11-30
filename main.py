@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import os
-import sys
 import argparse
-from train import Train
-import wandb
+from train import Train_cross_validation, Train
+import numpy
 
 def Parser_main():
     parser = argparse.ArgumentParser(description="Deep cox analysis model")
     parser.add_argument("--DatasetType", default="SNUH", help="TCGA_BRCA or BORAME or BORAME_Meta or BORAME_Prog", type=str)
     parser.add_argument("--CancerType", default = "GBM", help= "Cancer type")
+    parser.add_argument("--meta_root", default = "/mnt/disk2/metadata/", help = 'Metadata root', type = str)
+    parser.add_argument("--graph_root", default = "/mnt/disk2/graph_data/", help = 'Graphdata root', type = str)
     parser.add_argument("--learning_rate", default=0.0001, help="Learning rate", type=float)
     parser.add_argument("--weight_decay", default=0.00005, help="Weight decay rate", type=float)
     parser.add_argument("--clip_grad_norm_value", default=2.0, help="Gradient clipping value", type=float)
@@ -44,12 +44,12 @@ def Parser_main():
 
     parser.add_argument("--wandb", action = 'store_true', default= False)
     parser.add_argument("--save", action = 'store_true', default = False)
+    parser.add_argument("--cross_val", action = 'store_true', default = False)
 
     return parser.parse_args()
 
 def main():
     Argument = Parser_main()
-    best_model, bestepoch = Train(Argument)
-
+    result_df = Train(Argument)
 if __name__ == "__main__":
     main()

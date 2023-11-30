@@ -26,14 +26,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 def supernode_generation(h5_file, Argument, save_dir):
     sample = h5_file.split('.h5')[0].split('/')[-1]
     print(sample)
+    # Load the h5_data and feature array
     h5_data = h5py.File(h5_file, 'r')
     coord_array = h5_data['coord_array'][()]
-    feature_array = np.array(
-    torch.load(os.path.join(('/').join(h5_file.split('/')[0:10]), 'pt_files', Argument.feature_type, sample + '.pt')))[:, 0:Argument.feature_size]
+    feature_array = np.array(torch.load(os.path.join(('/').join(h5_file.split('/')[0:10]), 'pt_files', Argument.feature_type, sample + '.pt')))[:, 0:Argument.feature_size]
 
     node_dict = {}
 
@@ -57,6 +56,7 @@ def supernode_generation(h5_file, Argument, save_dir):
     X_grid_size = int(width / gridNum)
     Y_grid_size = int(height / gridNum)
 
+    # Supernode candidate generation: Calculate the cosine similarity with in 5x5 patches (threshold)
     if Argument.supernode:
         with tqdm(total=(gridNum) * (gridNum)) as pbar:
             for p in range(gridNum):
@@ -129,6 +129,7 @@ def supernode_generation(h5_file, Argument, save_dir):
 
                     pbar.update()
 
+        # Select the supernode in the supernode candidate, the most representative supernode(including many nodes)
         for key_value in node_dict.keys():
             node_dict[key_value] = list(set(node_dict[key_value]))
         dict_len_list = [len(node_dict[key]) for key in node_dict.keys()]
@@ -147,6 +148,7 @@ def supernode_generation(h5_file, Argument, save_dir):
         supernode_feature = []
         supernode_index = []
 
+        # Calculate the feature of the supernode: mean pooling the included supernode
         with tqdm(total=len(node_dict.keys())) as pbar_node:
             for key_value in node_dict.keys():
                 supernode_index.append(key_value)
@@ -171,6 +173,8 @@ def supernode_generation(h5_file, Argument, save_dir):
         supernode_coord_array = coord_array
         supernode_feature = feature_array
         supernode_index = range(coord_array.shape[0])
+
+    # Draw a graph based on the supernode distance threshold (7x7)
     supernode_coordinate_matrix = euclidean_distances(supernode_coord_array, supernode_coord_array)
     supernode_coordinate_mask = np.where(
         supernode_coordinate_matrix > Argument.supernode_spatial_threshold * reference_patch_size, 0, 1)
@@ -183,6 +187,7 @@ def supernode_generation(h5_file, Argument, save_dir):
     x = torch.tensor(supernode_feature, dtype=torch.float)
     data = Data(x=x, edge_index=edge_index)
 
+    # Get the graph only if the node number is more than 100
     connected_graph = g_util.to_networkx(data, to_undirected=True)
     connected_graph = [connected_graph.subgraph(item_graph).copy() for item_graph in
                        nx.connected_components(connected_graph) if len(item_graph) > 100]
@@ -210,8 +215,8 @@ def supernode_generation(h5_file, Argument, save_dir):
     new_edge_index = torch.tensor([new_edge_index_from, new_edge_index_to], dtype=torch.long)
     supernode_index = list(np.array(supernode_index)[connected_graph])
     supernode_coord_array = supernode_coord_array[connected_graph]
-    supernode_feature = supernode_feature[connected_graph]
 
+    # Polar transformation
     actual_pos = torch.tensor(supernode_coord_array)
     actual_pos = actual_pos.float()
 
@@ -222,6 +227,7 @@ def supernode_generation(h5_file, Argument, save_dir):
     except:
         print('Polar error')
 
+    # Save the data
     h5_output_dir = os.path.join(save_dir, 'h5_files')
     pt_output_dir = os.path.join(save_dir, 'pt_files')
     image_output_dir = os.path.join(save_dir, 'images')
@@ -251,11 +257,12 @@ def supernode_generation(h5_file, Argument, save_dir):
     torch.save(new_graph, pt_output_path)
 
     try:
-        slideimage = osd.OpenSlide(os.path.join("/mnt/disk3/svs_data/TCGA/KIRC/", sample + '.svs'))
+        slideimage = osd.OpenSlide(os.path.join(Argument.svs_dir,Argument.database, Argument.cancertype, sample + '.svs'))
     except:
         print('openslide error')
         return 0
 
+    # Visualize the graph
     WSI_graph = nx.Graph()
     WSI_graph.add_nodes_from(list(range(new_graph.x.shape[0])))
     WSI_edge_index = [(row_item, col_item) for row_item, col_item in zip(new_edge_index_from, new_edge_index_to)]
@@ -274,7 +281,6 @@ def supernode_generation(h5_file, Argument, save_dir):
 
     my_dpi = 24
     plt.figure(figsize=(WSI_image.size[0] / my_dpi, WSI_image.size[1] / my_dpi), dpi=24)
-    # plt.figure(figsize = (WSI_image.size[0], WSI_image.size[1]))
     plt.imshow(WSI_image)
     plt.axis('off')
     nx.draw_networkx(WSI_graph, pos=pos_dict, node_size=50, node_color='black', width=2, alpha=0.8, arrows=False,
@@ -294,7 +300,7 @@ def Parser_main():
     parser.add_argument("--database", default='SNUH', help="Use in the savedir", type=str)
     parser.add_argument("--cancertype", default='GBM', help="cancer type", type=str)
     parser.add_argument("--magnification", default='40x', help='magnification', type=str)
-    parser.add_argument("--rootdir", default="/mnt/disk2/TEAgraph_preprocessing/")
+    parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/")
     parser.add_argument("--graphdir", default="graphs", help="graph save dir", type=str)
     parser.add_argument("--patch_size", default='256', help='patch_size', type=str)
     parser.add_argument("--pretrained_model", default='Efficientnet', type=str)
@@ -303,18 +309,19 @@ def Parser_main():
                         help="Spatial threshold between nodes for supernode generation", type=float)
     parser.add_argument("--supernode_spatial_threshold", default=4.3,
                         help="Spatial threshold between nodes for graph construction", type=float)
-    parser.add_argument("--feature_size", default=1792, help="embedding size of pre-calculated feature", type=int)
+    parser.add_argument("--feature_size", default=1792, help="embedding size of pretrained_model", type=int)
     parser.add_argument("--supernode", action='store_true', default=False)
-    parser.add_argument("--split", default=0, type=int)
+    parser.add_argument("--group_num", default=0, type=int)
+    parser.add_argument("--group", default=None, type=int)
     parser.add_argument("--feature_type", default = 'ki_67', type = str)
+    parser.add_argument("--svs_dir", default = "/mnt/disk3/svs_data/", type = str, help = 'svs_data_directory for drawing graph')
     return parser.parse_args()
-
 
 def main():
     Argument = Parser_main()
     cancer_type = Argument.cancertype
     database = Argument.database
-    root_dir = Argument.rootdir
+    root_dir = Argument.save_dir
     database_dir = os.path.join(root_dir, database)
     cancer_type_dir = os.path.join(database_dir, cancer_type)
     magnification_dir = os.path.join(cancer_type_dir, Argument.magnification)
@@ -340,18 +347,17 @@ def main():
     processed_sample = os.listdir(os.path.join(save_dir, 'h5_files'))
     processed_sample = [sample.split('.h5')[0] for sample in processed_sample]
 
-    # final_files = [os.path.join(h5_dir, file) for file in files]
     final_files = [f for f in files if f.split('.h5')[0] not in processed_sample]
     final_files = [os.path.join(h5_dir, file) for file in final_files]
-
     final_files.sort(key=lambda f: os.stat(f).st_size, reverse=True)
-    group_list = [i % 5 for i in range(len(final_files))]
-    final_process_df = pd.DataFrame({
-        'file_location': final_files,
-        'group': group_list
-    })
+    if Argument.group_num > 1:
+        group_list = [i % Argument.group_num for i in range(len(final_files))]
+        final_process_df = pd.DataFrame({
+            'file_location': final_files,
+            'group': group_list
+        })
+        final_files = final_process_df[final_process_df['group'] == int(Argument.group)]['file_location'].tolist()
 
-    final_files = final_process_df[final_process_df['group'] == int(Argument.split)]['file_location'].tolist()
     with tqdm(total=len(final_files)) as pbar_tot:
         for h5py_file in final_files:
             supernode_generation(h5py_file, Argument, save_dir)

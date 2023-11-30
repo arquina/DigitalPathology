@@ -5,7 +5,8 @@ Created on Tue Apr  6 21:10:37 2021
 
 @author: kyoungseob
 """
-
+import sys
+sys.path.append('/home/seob/script/DigitalPathology')
 import os
 import pandas as pd
 import numpy as np
@@ -18,38 +19,7 @@ from EfficientNet import EfficientNet
 from skimage.filters import threshold_multiotsu
 import argparse
 from utils import StitchCoords
-
-class SurvivalImageDataset():
-    """
-    Target dataset has the list of images such as
-    _patientID_SurvDay_Censor_TumorStage_WSIPos.tif
-    """
-
-    def __init__(self, image, x, y, transform):
-        self.image = image
-        self.x = x
-        self.y = y
-        self.transform = transform
-
-    def __len__(self):
-        return len((self.image))
-
-    def __getitem__(self, idx):
-        """
-        patientID, SurvivalDuration, SurvivalCensor, Stage,
-        ProgressionDuration, ProgressionCensor, MetaDuration, MetaCensor
-        """
-
-        # device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-        image = self.image[idx]
-        x = self.x[idx]
-        y = self.y[idx]
-        image = image.convert('RGB')
-        R = self.transform(image)
-
-        sample = {'image': R, 'X': torch.tensor(x), 'Y': torch.tensor(y)}
-
-        return sample
+from DataLoader import SlidePatchDataset
 
 
 def feature_extraction(image, model_ft, device, Argument, save_dir):
@@ -67,15 +37,15 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
 
     downsampling = slideimage.level_downsamples
     if len(downsampling) > 2:
-        best_downsampling_level = 2
+        best_downsampling_level = 2 # downsampling_level 2 means convert 40x -> 10x
         downsampling_factor = int(slideimage.level_downsamples[best_downsampling_level])
 
         # Get the image at the requested scale
-        svs_native_levelimg = slideimage.read_region((0, 0), best_downsampling_level,
-                                                     slideimage.level_dimensions[best_downsampling_level])
+        svs_native_levelimg = slideimage.read_region((0, 0), best_downsampling_level, slideimage.level_dimensions[best_downsampling_level])
         svs_native_levelimg = svs_native_levelimg.convert('L')
         img = np.array(svs_native_levelimg)
 
+        # Otsu thresholding
         thresholds = threshold_multiotsu(img)
         regions = np.digitize(img, bins=thresholds)
         regions[regions == 1] = 0
@@ -96,10 +66,10 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
         temp_x = []
         temp_y = []
 
+        # Get the patch the otsu threshold value is lower than 0.75 and extract the feature
         with tqdm(total=num_row * num_col) as pbar_image:
             for i in range(0, num_col):
                 for j in range(0, num_row):
-
                     if thresh_otsu.shape[1] >= (i + 1) * downsampled_size:
                         if thresh_otsu.shape[0] >= (j + 1) * downsampled_size:
                             cut_thresh = thresh_otsu[j * downsampled_size:(j + 1) * downsampled_size,
@@ -133,7 +103,7 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
 
                         if counter == batchsize:
 
-                            Dataset = SurvivalImageDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
+                            Dataset = SlidePatchDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
                             dataloader = torch.utils.data.DataLoader(Dataset, batch_size=batchsize, num_workers=0,
                                                                      drop_last=False)
                             for sample_img in dataloader:
@@ -177,7 +147,7 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                         pbar_image.update()
 
             if counter < batchsize and counter > 0:
-                Dataset = SurvivalImageDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
+                Dataset = SlidePatchDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
                 dataloader = torch.utils.data.DataLoader(Dataset, batch_size=batchsize, num_workers=0, drop_last=False)
                 for sample_img in dataloader:
                     images = sample_img['image']
@@ -219,20 +189,21 @@ def Parser_main():
     parser.add_argument("--database", default='TCGA', help="Use in the savedir", type=str)
     parser.add_argument("--cancertype", default='KIRC', help="cancer type", type=str)
     parser.add_argument("--magnification", default = '40x', help = "magnification", type = str)
-    parser.add_argument("--rootdir", default="/mnt/disk2/TEAgraph_preprocessing/", help = 'root_dir', type = str)
+    parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/", help = 'root_dir', type = str)
     parser.add_argument("--svs_dir", default="/mnt/disk3/svs_data/", help="svs file location", type=str)
     parser.add_argument("--weight_path", default="/mnt/disk2/DSA_model/epoch-0,loss-0.012936,accuracy-0.094789.pt", help="pretrained weight path")
     parser.add_argument("--patch_size", default=256, help="crop image size", type=int)
-    parser.add_argument("--gpu", default='2', help="gpu device number", type=str)
+    parser.add_argument("--gpu", default='0', help="gpu device number", type=str)
     parser.add_argument("--pretrained_model", default = 'Efficientnet', type=str)
+    parser.add_argument("--group_num", default = 0, type = int)
+    parser.add_argument("--group", default = None , type = int)
     return parser.parse_args()
-
 
 def main():
     Argument = Parser_main()
     cancer_type = Argument.cancertype
     database = Argument.database
-    root_dir = Argument.rootdir
+    root_dir = Argument.save_dir
     if os.path.exists(root_dir) is False:
         os.mkdir(root_dir)
     database_dir = os.path.join(root_dir, database)
@@ -268,16 +239,14 @@ def main():
         os.mkdir(stitch_dir)
 
     svs_file_list = os.listdir(svs_dir)
-    processed_file_list = os.listdir(h5_dir)
 
     svs_sample_list = [svs.split('.svs')[0] for svs in svs_file_list]
     final_files = [os.path.join(svs_dir, sample + '.svs') for sample in svs_sample_list]
     final_files.sort(key=lambda f: os.stat(f).st_size, reverse=True)
-    group_list = [i % 2 for i in range(len(final_files))]
-
-    processing_df = pd.DataFrame({'file_location' : final_files, 'group' : group_list})
-    processing_df.to_csv(os.path.join(feature_dir, "processing_group.csv"), index = False)
-    final_files = processing_df[processing_df['group'] == int(Argument.gpu)-2]['file_location'].tolist()
+    if Argument.group_num > 1:
+        group_list = [i % Argument.group_num for i in range(len(final_files))]
+        processing_df = pd.DataFrame({'file_location' : final_files, 'group' : group_list})
+        final_files = processing_df[processing_df['group'] == Argument.group]['file_location'].tolist()
 
     device = torch.device(int(gpu) if torch.cuda.is_available() else "cpu")
     if Argument.pretrained_model == 'Efficientnet':
