@@ -10,6 +10,7 @@ from torch_geometric.data import Dataset
 import numpy as np
 from torch.utils.data.sampler import Sampler
 from sklearn.model_selection import train_test_split, StratifiedKFold
+from tqdm import tqdm
 
 class Sampler_custom(Sampler):
 
@@ -70,13 +71,13 @@ class CoxGraphDataset(Dataset):
         return len(self.df)
 
     def get(self, idx):
-        file_name = os.path.join(self.root_dir, self.df.iloc[idx].file_list)
+        file_name = os.path.join(self.root_dir, self.df.iloc[idx].File)
         data_origin = torch.load(file_name)
         transfer = T.ToSparseTensor()
         item = file_name.split('/')[-1].split('.pt')[0].split('_')[0]
 
-        survival = self.df.iloc[idx].death_duration
-        phase = self.df.iloc[idx].death
+        survival = self.df.iloc[idx].Survival
+        phase = self.df.iloc[idx].Censor
 
         data_re = Data(x=data_origin.x[:,:self.feature_size], edge_index=data_origin.edge_index)
         mock_data = Data(x=data_origin.x[:,:self.feature_size], edge_index=data_origin.edge_index, pos=data_origin.pos)
@@ -154,7 +155,66 @@ class SlidePatchDataset():
 
 def add_kfold_to_df(df, n_fold, seed):
     skf = StratifiedKFold(n_splits=n_fold, shuffle=True, random_state=seed)
-    for fold, (_, val_) in enumerate(skf.split(X=df, y=df.death)):
+    for fold, (_, val_) in enumerate(skf.split(X=df, y=df.Censor)):
         df.loc[df.index[val_], "kfold"] = int(fold)
 
     df['kfold'] = df['kfold'].astype(int)
+
+def metadata_list_generation(DatasetType, Trainlist, Metadata):
+    Train_survivallist = []
+    Train_censorlist = []
+    Train_stagelist = []
+    exclude_list = []
+    patient_list = []
+
+    if "TCGA" in DatasetType:
+        with tqdm(total=len(Trainlist)) as tbar:
+            for idx in range(len(Trainlist)):
+                item = '-'.join(Trainlist[idx].split('/')[-1].split('.pt')[0].split('_')[0].split('-')[0:3])
+                Match_item = Metadata[Metadata["case_submitter_id"] == item]
+                if Match_item.shape[0] != 0:
+                    if Match_item['vital_status'].tolist()[0] == "Alive":
+                        if '--' not in Match_item['days_to_last_follow_up'].tolist()[0]:
+                            if '--' not in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                Train_censorlist.append(0)
+                                Train_survivallist.append(
+                                    int(float(Match_item['days_to_last_follow_up'].tolist()[0])))
+                                if ('IV' or 'X') in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(4)
+                                elif "III" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(3)
+                                elif "II" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(2)
+                                elif "I" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(1)
+                                else:
+                                    Train_stagelist.append(0)
+                            else:
+                                exclude_list.append(idx)
+                        else:
+                            exclude_list.append(idx)
+                    else:
+                        if '--' not in Match_item['days_to_death'].tolist()[0]:
+                            if '--' not in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                Train_censorlist.append(1)
+                                Train_survivallist.append(int(float(Match_item['days_to_death'].tolist()[0])))
+
+                                if ('IV' or 'X') in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(4)
+                                elif "III" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(3)
+                                elif "II" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(2)
+                                elif "I" in Match_item['ajcc_pathologic_stage'].tolist()[0]:
+                                    Train_stagelist.append(1)
+                                else:
+                                    Train_stagelist.append(0)
+                            else:
+                                exclude_list.append(idx)
+                        else:
+                            exclude_list.append(idx)
+                else:
+                    exclude_list.append(idx)
+        _ = [Trainlist.pop(idx_item - c) for c, idx_item in enumerate(exclude_list)]
+
+    return Trainlist, Train_survivallist, Train_censorlist, Train_stagelist

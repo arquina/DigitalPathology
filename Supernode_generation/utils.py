@@ -5,12 +5,10 @@ from PIL import Image
 import math
 import cv2
 
-
 def DrawGrid(img, coord, shape, thickness=2, color=(0, 0, 0, 255)):
     cv2.rectangle(img, tuple(np.maximum([0, 0], coord - thickness // 2)),
                   tuple(coord - thickness // 2 + np.array(shape)), color, thickness=thickness)
     return img
-
 
 def DrawMapFromCoords(canvas, wsi, coords, patch_size, downscale, indices=None, verbose=1, draw_grid=True):
     if indices is None:
@@ -39,7 +37,6 @@ def DrawMapFromCoords(canvas, wsi, coords, patch_size, downscale, indices=None, 
             DrawGrid(canvas, coord, patch_size)
 
     return Image.fromarray(canvas)
-
 
 def StitchCoords(hdf5_file_path, wsi, downscale, draw_grid=False, bg_color=(0, 0, 0), alpha=-1, patch_size=256):
     file = h5py.File(hdf5_file_path, 'r')

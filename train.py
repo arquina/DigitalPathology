@@ -2,7 +2,6 @@
 
 import os
 import torch
-import torch_geometric.transforms as T
 import pandas as pd
 
 import wandb
@@ -16,25 +15,28 @@ from tqdm import tqdm
 
 from train_utils import accuracytest, cox_sort, coxph_loss, makecheckpoint_dir_graph, model_selection
 from train_utils import non_decay_filter
-from DataLoader import Sampler_custom, add_kfold_to_df, CoxGraphDataset
+from DataLoader import Sampler_custom, add_kfold_to_df, CoxGraphDataset, metadata_list_generation
 import numpy as np
 
 def Train_cross_validation(Argument):
-    checkpoint_dir = makecheckpoint_dir_graph(Argument)
+    if Argument.save:
+        checkpoint_dir = makecheckpoint_dir_graph(Argument)
     batch_num = int(Argument.batch_size)
     device = torch.device(int(Argument.gpu))
     metadata_root = os.path.join(Argument.meta_root, Argument.DatasetType, Argument.CancerType)
     Metadata = pd.read_csv(os.path.join(metadata_root, Argument.CancerType + '_clinical.tsv'), sep='\t')
 
-    TrainRoot = os.path.join(Argument.graph_root, Argument.DatasetType, Argument.CancerType)
+    TrainRoot = os.path.join(Argument.graph_root, Argument.DatasetType, Argument.CancerType, Argument.magnification, Argument.patch_size, Argument.pretrain, 'graph', 'pt_files')
     Trainlist = os.listdir(TrainRoot)
+    Trainlist, Train_survivallist, Train_censorlist, Train_stagelist = metadata_list_generation(Argument.DatasetType, Trainlist, Metadata)
+
+    train_df = pd.DataFrame(zip(Trainlist, Train_survivallist, Train_censorlist, Train_stagelist), columns = ['File', 'Survival', 'Censor', 'Stage'])
     Fi = Argument.FF_number
     Argument.n_intervals = 1
-    _ = add_kfold_to_df(Metadata, Fi, Argument.random_seed)
-    train_batch_sampler = Sampler_custom(Event_idx, Censored_idx, batch_num)
+    _ = add_kfold_to_df(train_df, Fi, Argument.random_seed)
+
     Argument.n_intervals = 1
     Fi = Argument.FF_number
-    _ = add_kfold_to_df(Metadata, Fi, Argument.random_seed)
 
     FFCV_accuracy = []
     FFCV_best_epoch = []
@@ -52,8 +54,8 @@ def Train_cross_validation(Argument):
             if os.path.exists(fold_checkpoint_dir) is False:
                 os.mkdir(fold_checkpoint_dir)
 
-        Train_df = Metadata[Metadata['kfold'] != fold]
-        Val_df = Metadata[Metadata['kfold'] == fold]
+        Train_df = train_df[train_df['kfold'] != fold]
+        Val_df = train_df[train_df['kfold'] == fold]
         if Argument.save:
             Train_df.to_csv(os.path.join(fold_checkpoint_dir, 'Train_dataset.csv'), index=False)
             Val_df.to_csv(os.path.join(fold_checkpoint_dir, 'Validation_dataset.csv'), index=False)
@@ -61,12 +63,18 @@ def Train_cross_validation(Argument):
         print(str(Fi))
         print('Train data: ', str(len(Train_df)))
         print('Val data: ', str(len(Val_df)))
-        TrainDataset = CoxGraphDataset(df=Train_df, root_dir=root_dir)
-        ValidDataset = CoxGraphDataset(df=Val_df, root_dir=root_dir)
+        TrainDataset = CoxGraphDataset(df=Train_df, root_dir=TrainRoot, feature_size = Argument.feature_size)
+        ValidDataset = CoxGraphDataset(df=Val_df, root_dir=TrainRoot, feature_size = Argument.feature_size)
 
         torch.manual_seed(Argument.random_seed)
-        train_loader = DataListLoader(TrainDataset, batch_size=batch_num, shuffle=True, num_workers=4, pin_memory=True)
-        val_loader = DataListLoader(ValidDataset, batch_size=batch_num, shuffle=False, num_workers=4, pin_memory=True)
+        if Argument.sampler:
+            Event_idx = np.where(np.array(Train_df['Censor']) == 1)[0]
+            Censored_idx = np.where(np.array(Train_df['Censor']) == 0)[0]
+            train_batch_sampler = Sampler_custom(Event_idx, Censored_idx, batch_num)
+            train_loader = DataListLoader(TrainDataset, batch_sampler=train_batch_sampler, num_workers=8, pin_memory=True)
+        else:
+            train_loader = DataListLoader(TrainDataset, batch_size=batch_num, shuffle=True, num_workers=8, pin_memory=True)
+        val_loader = DataListLoader(ValidDataset, batch_size=batch_num, shuffle=False, num_workers=8, pin_memory=True)
 
         model = model_selection(Argument)
         model_parameter_groups = non_decay_filter(model)
@@ -200,7 +208,7 @@ def Train_cross_validation(Argument):
         FFCV_best_epoch.append(bestepoch)
 
     df = pd.DataFrame(list(zip(list(range(Argument.FF_number)), FFCV_accuracy, FFCV_best_epoch)),
-                      columns=['Fold', 'Acc', 'Best_epoch'])
+                      columns=['Fold', 'C-index', 'Best_epoch'])
     if Argument.save:
         df.to_csv(os.path.join(checkpoint_dir, 'final_result.csv'), index=False)
         bestFi = np.argmax(FFCV_accuracy)
@@ -390,7 +398,7 @@ def Train(Argument):
         FFCV_best_epoch.append(bestepoch)
 
     df = pd.DataFrame(list(zip(list(range(Argument.FF_number)), FFCV_accuracy, FFCV_best_epoch)),
-                      columns=['Fold', 'Acc', 'Best_epoch'])
+                      columns=['Fold', 'C-index', 'Best_epoch'])
     if Argument.save:
         df.to_csv(os.path.join(checkpoint_dir, 'final_result.csv'), index=False)
         bestFi = np.argmax(FFCV_accuracy)

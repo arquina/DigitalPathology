@@ -98,10 +98,9 @@ class PropHazards(nn.Module):
         return torch.pow(torch.sigmoid(x), torch.exp(x))  # .float().to(device)
 
 class GAT(torch.nn.Module):
-
     def __init__(self, dropout_rate, dropedge_rate, Argument):
         super(GAT, self).__init__()
-        torch.manual_seed(12345)
+        torch.manual_seed(Argument.random_seed)
         self.Argument = Argument
 
         dim = Argument.initial_dim

@@ -39,7 +39,10 @@ def model_selection(Argument):
 def makecheckpoint_dir_graph(Argument):
     todaydata = datetime.datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d_%H:%M:%S")
 
-    checkpoint_dir = os.path.join("/mnt/disk2/result/TEA_graph/", Argument.DatasetType)
+    checkpoint_dir = os.path.join(Argument.save_dir, Argument.DatasetType)
+    if os.path.exists(checkpoint_dir) is False:
+        os.mkdir(checkpoint_dir)
+    checkpoint_dir = os.path.join(checkpoint_dir, Argument.CancerType)
     if os.path.exists(checkpoint_dir) is False:
         os.mkdir(checkpoint_dir)
     checkpoint_dir = os.path.join(checkpoint_dir, Argument.model)
@@ -64,33 +67,19 @@ def ce_loss(hazards,Y, c, device, alpha = 0.7, eps = 1e-7):
     loss = loss.mean()
     return loss
 
-def cox_sort(out, tempsurvival, tempphase, tempmeta, tempstage, tempID,
-             EpochSurv, EpochPhase, EpochRisk, EpochStage, EpochID):
+def cox_sort(out, tempsurvival, tempphase):
 
     sort_idx = torch.argsort(tempsurvival, descending=True)
 
     risklist = out[sort_idx]
     tempsurvival = tempsurvival[sort_idx]
     tempphase = tempphase[sort_idx]
-    tempmeta = tempmeta[sort_idx]
-    for idx in sort_idx.cpu().detach().tolist():
-        EpochID.append(tempID[idx])
-    tempstage = tempstage[sort_idx]
 
     risklist = risklist.to(out.device)
     tempsurvival = tempsurvival.to(out.device)
     tempphase = tempphase.to(out.device)
-    tempmeta = tempmeta.to(out.device)
 
-    for riskval, survivalval, phaseval, stageval, metaval in zip(risklist, tempsurvival,
-                                                                 tempphase, tempstage,
-                                                                 tempmeta):
-        EpochSurv.append(survivalval.cpu().detach().item())
-        EpochPhase.append(phaseval.cpu().detach().item())
-        EpochRisk.append(riskval.cpu().detach().item())
-        EpochStage.append(stageval.cpu().detach().item())
-
-    return risklist, tempsurvival, tempphase, tempmeta, EpochSurv, EpochPhase, EpochRisk, EpochStage
+    return risklist, tempsurvival, tempphase
 
 def accuracytest(survivals, risk, censors):
     survlist = []
