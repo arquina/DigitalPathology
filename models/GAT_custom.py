@@ -179,8 +179,6 @@ class GAT(torch.nn.Module):
         risk = self.risk_prediction_layer(postprocessed_output)
         if self.loss == 'nll':
             risk = torch.sigmoid(risk)
-
-
         if Interpretation_mode:
             return risk, final_x, attention_list
         else:

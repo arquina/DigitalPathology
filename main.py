@@ -12,7 +12,7 @@ def Parser_main():
     parser.add_argument("--CancerType", default = "KIRC", help= "Cancer type")
     parser.add_argument("--meta_root", default = "/mnt/disk2/metadata/", help = 'Metadata root', type = str)
     parser.add_argument("--graph_root", default = "/mnt/disk2/TEAgraph_preprocessing/", help = 'Graphdata root', type = str)
-    parser.add_argument("--save_dir", default = "/mnt/disk2/result/TEA-graph", type = str)
+    parser.add_argument("--save_dir", default = "/mnt/disk2/result/TEA_graph", type = str)
     parser.add_argument("--magnification", default = "40x", help = 'resolution', type = str)
     parser.add_argument("--patch_size", default = '256', help = 'patch_size', type = str)
     parser.add_argument("--pretrain", default = 'Efficientnet', type = str)

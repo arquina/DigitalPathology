@@ -1,2 +1,2 @@
-from interpretation_utils import Calculate_feature_attention, calculate_feature_IG
-from interpretation_utils import ig_normalization, Visualize_IG, whole_IG_normalize
+from .interpretation_utils import Calculate_feature_attention, calculate_feature_IG
+from .interpretation_utils import ig_normalization, Visualize_IG, whole_IG_normalize
