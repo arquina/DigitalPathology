@@ -7,7 +7,7 @@ import pandas as pd
 import wandb
 
 from torch import optim
-from torch_geometric.data import DataListLoader
+from torch_geometric.data import DataListLoader, DataLoader
 from torch_geometric.nn import DataParallel
 from torch.optim.lr_scheduler import OneCycleLR
 
@@ -22,7 +22,8 @@ def Train_cross_validation(Argument):
     if Argument.save:
         checkpoint_dir = makecheckpoint_dir_graph(Argument)
     batch_num = int(Argument.batch_size)
-    device = torch.device(int(Argument.gpu))
+    device = torch.device(int(Argument.gpu[0]))
+    single_gpu = False if len(Argument.gpu) > 1 else True
     metadata_root = os.path.join(Argument.meta_root, Argument.DatasetType, Argument.CancerType)
     Metadata = pd.read_csv(os.path.join(metadata_root, Argument.CancerType + '_clinical.tsv'), sep='\t')
 
@@ -70,22 +71,30 @@ def Train_cross_validation(Argument):
         ValidDataset = CoxGraphDataset(df=Val_df, root_dir=TrainRoot, feature_size = Argument.feature_size)
 
         torch.manual_seed(Argument.random_seed)
-        if Argument.sampler:
-            Event_idx = np.where(np.array(Train_df['Censor']) == 1)[0]
-            Censored_idx = np.where(np.array(Train_df['Censor']) == 0)[0]
-            train_batch_sampler = Sampler_custom(Event_idx, Censored_idx, batch_num)
-            train_loader = DataListLoader(TrainDataset, batch_sampler=train_batch_sampler, num_workers=8, pin_memory=True)
+        if single_gpu:
+            if Argument.sampler:
+                Event_idx = np.where(np.array(Train_df['Censor']) == 1)[0]
+                Censored_idx = np.where(np.array(Train_df['Censor']) == 0)[0]
+                train_batch_sampler = Sampler_custom(Event_idx, Censored_idx, batch_num)
+                train_loader = DataLoader(TrainDataset, batch_sampler=train_batch_sampler, num_workers=8, pin_memory=True)
+            else:
+                train_loader = DataLoader(TrainDataset, batch_size=batch_num, shuffle=True, num_workers=8, pin_memory=True)
+            val_loader = DataLoader(ValidDataset, batch_size=batch_num, shuffle=False, num_workers=8, pin_memory=True)
         else:
-            train_loader = DataListLoader(TrainDataset, batch_size=batch_num, shuffle=True, num_workers=8, pin_memory=True)
-        val_loader = DataListLoader(ValidDataset, batch_size=batch_num, shuffle=False, num_workers=8, pin_memory=True)
+            if Argument.sampler:
+                Event_idx = np.where(np.array(Train_df['Censor']) == 1)[0]
+                Censored_idx = np.where(np.array(Train_df['Censor']) == 0)[0]
+                train_batch_sampler = Sampler_custom(Event_idx, Censored_idx, batch_num)
+                train_loader = DataListLoader(TrainDataset, batch_sampler=train_batch_sampler, num_workers=8, pin_memory=True)
+            else:
+                train_loader = DataListLoader(TrainDataset, batch_size=batch_num, shuffle=True, num_workers=8, pin_memory=True)
+            val_loader = DataListLoader(ValidDataset, batch_size=batch_num, shuffle=False, num_workers=8, pin_memory=True)
 
         model = model_selection(Argument)
         model_parameter_groups = non_decay_filter(model)
 
-        if Argument.gpu == 0:
-            model = DataParallel(model, device_ids=[0, 1], output_device=0)
-        elif Argument.gpu == 2:
-            model = DataParallel(model, device_ids=[2, 3], output_device=2)
+        if single_gpu is False:
+            model = DataParallel(model, device_ids=Argument.gpu, output_device=device)
 
         model = model.to(device)
         if Argument.wandb:
@@ -125,10 +134,17 @@ def Train_cross_validation(Argument):
                         batchcounter = 1
                         pass_count = 0
                         for c, d in enumerate(loader[mode], 1):
+                            if single_gpu:
+                                d = d.to(device)
                             optimizer_ft.zero_grad()
-                            tempsurvival = torch.tensor([data.survival for data in d])
-                            tempphase = torch.tensor([data.phase for data in d])
-                            tempID = np.asarray([data.item for data in d])
+                            if single_gpu:
+                                tempsurvival = torch.tensor(d.survival)
+                                tempphase = torch.tensor(d.phase)
+                                tempID = np.asarray(d.item)
+                            else:
+                                tempsurvival = torch.tensor([data.survival for data in d])
+                                tempphase = torch.tensor([data.phase for data in d])
+                                tempID = np.asarray([data.item for data in d])
                             out = model(d)
                             EpochSurv.extend(tempsurvival.cpu().detach().tolist())
                             EpochID.extend(tempID.tolist())
