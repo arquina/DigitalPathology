@@ -226,6 +226,7 @@ def supernode_generation(h5_file, Argument, save_dir):
         new_graph = pos_transfrom(new_graph)
     except:
         print('Polar error')
+        return 0
 
     # Save the data
     h5_output_dir = os.path.join(save_dir, 'h5_files')
