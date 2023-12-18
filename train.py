@@ -43,10 +43,13 @@ def Train_cross_validation(Argument):
     for fold in range(Fi):
         if Argument.wandb:
             run = wandb.init(reinit=True, project='TEA-graph', group=checkpoint_dir.split('/')[-1])
-            if Argument.without_biopsy:
-                wandb.run.name = checkpoint_dir.split('/')[-1] + '_total_only_' + Argument.pretrain + '_' + Argument.dataset_type + str(fold)
-            else:
-                wandb.run.name = checkpoint_dir.split('/')[-1] + '_all_' + Argument.pretrain + '_' + Argument.dataset_type + str(fold)
+            if Argument.DatasetType == 'SNUH':
+                if Argument.without_biopsy:
+                    wandb.run.name = checkpoint_dir.split('/')[-1] + '_total_only_' + Argument.pretrain + '_' + Argument.dataset_type + str(fold)
+                else:
+                    wandb.run.name = checkpoint_dir.split('/')[-1] + '_all_' + Argument.pretrain + '_' + Argument.dataset_type + str(fold)
+            elif Argument.DatasetType == 'TCGA':
+                wandb.run.name = checkpoint_dir.split('/')[-1] + Argument.pretrain + '_' + Argument.DatasetType + str(fold)
             wandb.run.save()
 
         if Argument.save:
