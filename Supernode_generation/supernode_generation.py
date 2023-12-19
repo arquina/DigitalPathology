@@ -226,6 +226,7 @@ def supernode_generation(h5_file, Argument, save_dir):
         new_graph = pos_transfrom(new_graph)
     except:
         print('Polar error')
+        return 0
 
     # Save the data
     h5_output_dir = os.path.join(save_dir, 'h5_files')
@@ -269,15 +270,17 @@ def supernode_generation(h5_file, Argument, save_dir):
     WSI_graph.add_edges_from(WSI_edge_index)
     WSI_graph.remove_edges_from(nx.selfloop_edges(WSI_graph))
 
-    X_pos = supernode_coord_array[:, 0]
-    Y_pos = supernode_coord_array[:, 1]
-    X_Y_pos = [(X / 16, Y / 16) for X, Y in zip(X_pos, Y_pos)]
-    pos_dict = zip(range(new_graph.x.shape[0]), X_Y_pos)
-    pos_dict = dict(pos_dict)
-
     WSI_level = 2
     WSI_width, WSI_height = slideimage.level_dimensions[WSI_level]
     WSI_image = slideimage.read_region((0, 0), WSI_level, (WSI_width, WSI_height))
+    downsampling_factor = int(slideimage.level_downsamples[WSI_level])
+    
+    X_pos = supernode_coord_array[:, 0]
+    Y_pos = supernode_coord_array[:, 1]
+    X_Y_pos = [(X / downsampling_factor, Y / downsampling_factor) for X, Y in zip(X_pos, Y_pos)]
+    pos_dict = zip(range(new_graph.x.shape[0]), X_Y_pos)
+    pos_dict = dict(pos_dict)
+
 
     my_dpi = 24
     plt.figure(figsize=(WSI_image.size[0] / my_dpi, WSI_image.size[1] / my_dpi), dpi=24)
