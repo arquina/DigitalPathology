@@ -256,43 +256,43 @@ def supernode_generation(h5_file, Argument, save_dir):
     file.close()
     torch.save(new_graph, pt_output_path)
 
-    # try:
-    #     slideimage = osd.OpenSlide(os.path.join(Argument.svs_dir,Argument.database, Argument.cancertype, sample + '.svs'))
-    # except:
-    #     print('openslide error')
-    #     return 0
-    #
-    # # Visualize the graph
-    # WSI_graph = nx.Graph()
-    # WSI_graph.add_nodes_from(list(range(new_graph.x.shape[0])))
-    # WSI_edge_index = [(row_item, col_item) for row_item, col_item in zip(new_edge_index_from, new_edge_index_to)]
-    # WSI_graph.add_edges_from(WSI_edge_index)
-    # WSI_graph.remove_edges_from(nx.selfloop_edges(WSI_graph))
-    #
-    # X_pos = supernode_coord_array[:, 0]
-    # Y_pos = supernode_coord_array[:, 1]
-    # X_Y_pos = [(X / 16, Y / 16) for X, Y in zip(X_pos, Y_pos)]
-    # pos_dict = zip(range(new_graph.x.shape[0]), X_Y_pos)
-    # pos_dict = dict(pos_dict)
-    #
-    # WSI_level = 2
-    # WSI_width, WSI_height = slideimage.level_dimensions[WSI_level]
-    # WSI_image = slideimage.read_region((0, 0), WSI_level, (WSI_width, WSI_height))
-    #
-    # my_dpi = 24
-    # plt.figure(figsize=(WSI_image.size[0] / my_dpi, WSI_image.size[1] / my_dpi), dpi=24)
-    # plt.imshow(WSI_image)
-    # plt.axis('off')
-    # nx.draw_networkx(WSI_graph, pos=pos_dict, node_size=50, node_color='black', width=2, alpha=0.8, arrows=False,
-    #                  with_labels=False)
-    # plt.subplots_adjust(left=0., right=1., top=1., bottom=0.)
-    # plt.gca().invert_yaxis()
-    # plt.savefig(os.path.join(
-    #     image_output_dir,
-    #     sample + '_WSI_graph_wo_IG_temp.jpeg'), transparent=True)
-    # plt.clf()
-    # plt.cla()
-    # plt.close()
+    try:
+        slideimage = osd.OpenSlide(os.path.join(Argument.svs_dir,Argument.database, Argument.cancertype, sample + '.svs'))
+    except:
+        print('openslide error')
+        return 0
+
+    # Visualize the graph
+    WSI_graph = nx.Graph()
+    WSI_graph.add_nodes_from(list(range(new_graph.x.shape[0])))
+    WSI_edge_index = [(row_item, col_item) for row_item, col_item in zip(new_edge_index_from, new_edge_index_to)]
+    WSI_graph.add_edges_from(WSI_edge_index)
+    WSI_graph.remove_edges_from(nx.selfloop_edges(WSI_graph))
+
+    X_pos = supernode_coord_array[:, 0]
+    Y_pos = supernode_coord_array[:, 1]
+    X_Y_pos = [(X / 16, Y / 16) for X, Y in zip(X_pos, Y_pos)]
+    pos_dict = zip(range(new_graph.x.shape[0]), X_Y_pos)
+    pos_dict = dict(pos_dict)
+
+    WSI_level = 2
+    WSI_width, WSI_height = slideimage.level_dimensions[WSI_level]
+    WSI_image = slideimage.read_region((0, 0), WSI_level, (WSI_width, WSI_height))
+
+    my_dpi = 24
+    plt.figure(figsize=(WSI_image.size[0] / my_dpi, WSI_image.size[1] / my_dpi), dpi=24)
+    plt.imshow(WSI_image)
+    plt.axis('off')
+    nx.draw_networkx(WSI_graph, pos=pos_dict, node_size=50, node_color='black', width=2, alpha=0.8, arrows=False,
+                     with_labels=False)
+    plt.subplots_adjust(left=0., right=1., top=1., bottom=0.)
+    plt.gca().invert_yaxis()
+    plt.savefig(os.path.join(
+        image_output_dir,
+        sample + '_WSI_graph_wo_IG_temp.jpeg'), transparent=True)
+    plt.clf()
+    plt.cla()
+    plt.close()
 
 
 def Parser_main():
@@ -303,7 +303,7 @@ def Parser_main():
     parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/")
     parser.add_argument("--graphdir", default="graphs", help="graph save dir", type=str)
     parser.add_argument("--patch_size", default='256', help='patch_size', type=str)
-    parser.add_argument("--pretrained_model", default='Contrastive', type=str)
+    parser.add_argument("--pretrained_model", default='Efficientnet', type=str)
     parser.add_argument("--threshold", default=0.75, help="cosine similarity threshold", type=float)
     parser.add_argument("--node_spatial_threshold", default=2.9,
                         help="Spatial threshold between nodes for supernode generation", type=float)
@@ -313,7 +313,7 @@ def Parser_main():
     parser.add_argument("--supernode", action='store_true', default=False)
     parser.add_argument("--group_num", default=0, type=int)
     parser.add_argument("--group", default=None, type=int)
-    parser.add_argument("--feature_type", default = 'plus_graph', type = str)
+    parser.add_argument("--feature_type", default = 'ki_67', type = str)
     parser.add_argument("--svs_dir", default = "/mnt/disk3/svs_data/", type = str, help = 'svs_data_directory for drawing graph')
     return parser.parse_args()
 

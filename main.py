@@ -28,7 +28,7 @@ def Parser_main():
     parser.add_argument("--num_epochs", default=1, help="Number of epochs", type=int)
     parser.add_argument("--FF_number", default=5, help="Selecting set for the five fold cross validation", type=int)
     parser.add_argument("--model", default="GAT_custom", help="GAT_custom/DeepGraphConv/PatchGCN/GIN/MIL/MIL-attention", type=str)
-    parser.add_argument("--gpu", default=2, help="Target gpu for calculating loss value", type=int)
+    parser.add_argument("--gpu", default=[2], help="Target gpu for calculating loss value", type=int)
     parser.add_argument("--random_seed", default = 1234567, type = int)
     parser.add_argument("--loss", default='CoxPH', type=str, help='Loss function(CoxPH, nnet, nll)')
     parser.add_argument("--sampler", action='store_true', default = True)
