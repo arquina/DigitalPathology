@@ -132,24 +132,45 @@ def make_label(t):
     return y_labels.tolist(), time_break
 
 class SlidePatchDataset():
-    def __init__(self, image, x, y, transform):
-        self.image = image
+    def __init__(self, image, x, y, transform, multimodel = False):
+    # if multimodel image is a list of a list
+        self.multimodel = multimodel
+        if multimodel:
+            self.he_image = image[0]
+            self.ihc_image = image[1]
+        else:
+            self.image = image
         self.x = x
         self.y = y
         self.transform = transform
 
     def __len__(self):
-        return len((self.image))
+        if self.multimodel:
+            return len((self.he_image))
+        else:
+            return len((self.image))
 
     def __getitem__(self, idx):
+        if self.multimodel:
+            he_image = self.he_image[idx]
+            ihc_image = self.ihc_image[idx]
 
-        image = self.image[idx]
+            he_image = he_image.convert('RGB')
+            ihc_image = ihc_image.convert('RGB')
+
+            he_R = self.transform(he_image)
+            ihc_R = self.transform(ihc_image)
+        else:
+            image = self.image[idx]
+            image = image.convert('RGB')
+            R = self.transform(image)
         x = self.x[idx]
         y = self.y[idx]
-        image = image.convert('RGB')
-        R = self.transform(image)
 
-        sample = {'image': R, 'X': torch.tensor(x), 'Y': torch.tensor(y)}
+        if self.multimodel:
+            sample = {'he_image': he_R, 'ihc_image': ihc_R, 'X': torch.tensor(x), 'Y': torch.tensor(y)}
+        else:
+            sample = {'image': R, 'X': torch.tensor(x), 'Y': torch.tensor(y)}
 
         return sample
 

@@ -19,6 +19,7 @@ def Parser_main():
     parser.add_argument("--feature_type", default = 'only_HE', help= 'feature_type', type = str)
     parser.add_argument("--spatial_threshold", default='0.75', help='Spatial_threshold', type=str)
     parser.add_argument("--feature_size", default = 1792, type = int)
+    parser.add_argument("--dataset_type", default='HE', type=str)
 
     parser.add_argument("--learning_rate", default=0.0001, help="Learning rate", type=float)
     parser.add_argument("--weight_decay", default=0.00005, help="Weight decay rate", type=float)

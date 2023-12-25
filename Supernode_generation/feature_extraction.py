@@ -249,6 +249,7 @@ def main():
         final_files = processing_df[processing_df['group'] == Argument.group]['file_location'].tolist()
 
     device = torch.device(int(gpu) if torch.cuda.is_available() else "cpu")
+
     if Argument.pretrained_model == 'Efficientnet':
         model_ft = EfficientNet.from_pretrained('efficientnet-b4', num_classes=2)
         if weight_path is not None:
@@ -259,7 +260,8 @@ def main():
         transforms.CenterCrop(299),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+        ])
+
     model_ft = model_ft.to(device)
     model_ft.eval()
 
