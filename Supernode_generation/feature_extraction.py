@@ -20,6 +20,7 @@ from skimage.filters import threshold_multiotsu
 import argparse
 from utils import StitchCoords
 from DataLoader import SlidePatchDataset
+from models import RetCLL
 
 
 def feature_extraction(image, model_ft, device, Argument, save_dir):
@@ -52,12 +53,18 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
         regions[regions == 2] = 1
         thresh_otsu = regions
 
-        imagesize = Argument.patch_size
-        downsampled_size = int(imagesize / downsampling_factor)
-        Width = slideimage.dimensions[0]
-        Height = slideimage.dimensions[1]
-        num_row = int(Height / imagesize) + 1
-        num_col = int(Width / imagesize) + 1
+        if Argument.magnification == '40x':
+            imagesize = Argument.patch_size
+            downsampled_size = int(imagesize / downsampling_factor)
+            Width = slideimage.dimensions[0]
+            Height = slideimage.dimensions[1]
+        elif Argument.magnification == '20x':
+            imagesize = Argument.patch_size * 4
+            downsampled_size = int(imagesize / downsampling_factor)
+            Width = slideimage.level_dimensions[1][0]
+            Height = slideimage.level_dimensions[1][1]
+        num_row = int(Height / Argument.patch_size) + 1
+        num_col = int(Width / Argument.patch_size) + 1
         feature_list = []
         x_y_list = []
         counter = 0
@@ -90,8 +97,11 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                         pass
                     else:
                         filter_location = (i * imagesize, j * imagesize)
-                        level = 0
-                        patch_size = (imagesize, imagesize)
+                        if Argument.magnification == '40x':
+                            level = 0
+                        elif Argument.magnification == '20x':
+                            level = 1
+                        patch_size = (Argument.patch_size, Argument.patch_size)
                         location = (filter_location[0], filter_location[1])
 
                         CutImage = slideimage.read_region(location, level, patch_size)
@@ -102,7 +112,6 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                         batchsize = 256
 
                         if counter == batchsize:
-
                             Dataset = SlidePatchDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
                             dataloader = torch.utils.data.DataLoader(Dataset, batch_size=batchsize, num_workers=0,
                                                                      drop_last=False)
@@ -112,14 +121,15 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                                 with torch.set_grad_enabled(False):
                                     if Argument.pretrained_model == 'Efficientnet':
                                         classifier, features = model_ft(images)
-                                    elif Argument.pretrained_model == 'resnet_pretrained':
+                                    else:
                                         features = model_ft(images)
+
 
                             if inside_counter == 0:
                                 if Argument.pretrained_model == 'Efficientnet':
                                     feature_list = np.concatenate((features.cpu().detach().numpy(),
                                                                    classifier.cpu().detach().numpy()), axis=1)
-                                elif Argument.pretrained_model == 'resnet_pretrained':
+                                else:
                                     feature_list = features.cpu().detach().numpy()
                                 temp_x = np.reshape(np.array(temp_x), (len(temp_x), 1))
                                 temp_y = np.reshape(np.array(temp_y), (len(temp_x), 1))
@@ -131,7 +141,7 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                                                                np.concatenate((features.cpu().detach().numpy(),
                                                                                classifier.cpu().detach().numpy()),
                                                                               axis=1)), axis=0)
-                                elif Argument.pretrained_model == 'resnet_pretrained':
+                                else:
                                     feature_list = np.concatenate((feature_list, features.cpu().detach().numpy()), axis = 0)
                                 temp_x = np.reshape(np.array(temp_x), (len(temp_x), 1))
                                 temp_y = np.reshape(np.array(temp_y), (len(temp_x), 1))
@@ -155,22 +165,32 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                     with torch.set_grad_enabled(False):
                         if Argument.pretrained_model == 'Efficientnet':
                             classifier, features = model_ft(images)
-                        elif Argument.pretrained_model == 'resnet_pretrained':
+                        else:
                             features = model_ft(images)
+                    if inside_counter == 0:
+                        if Argument.pretrained_model == 'Efficientnet':
+                            feature_list = np.concatenate((features.cpu().detach().numpy(),
+                                                           classifier.cpu().detach().numpy()), axis=1)
+                        else:
+                            feature_list = features.cpu().detach().numpy()
+                        temp_x = np.reshape(np.array(temp_x), (len(temp_x), 1))
+                        temp_y = np.reshape(np.array(temp_y), (len(temp_x), 1))
 
-                    if Argument.pretrained_model == 'Efficientnet':
-                        feature_list = np.concatenate((feature_list,
-                                                       np.concatenate((features.cpu().detach().numpy(),
-                                                                       classifier.cpu().detach().numpy()),
-                                                                      axis=1)), axis=0)
-                    elif Argument.pretrained_model == 'resnet_pretrained':
-                        feature_list = np.concatenate((feature_list, features.cpu().detach().numpy()), axis=0)
+                        x_y_list = np.concatenate((temp_x, temp_y), axis=1)
+                    else:
+                        if Argument.pretrained_model == 'Efficientnet':
+                            feature_list = np.concatenate((feature_list,
+                                                           np.concatenate((features.cpu().detach().numpy(),
+                                                                           classifier.cpu().detach().numpy()),
+                                                                          axis=1)), axis=0)
+                        else:
+                            feature_list = np.concatenate((feature_list, features.cpu().detach().numpy()), axis=0)
 
-                    temp_x = np.reshape(np.array(temp_x), (len(temp_x), 1))
-                    temp_y = np.reshape(np.array(temp_y), (len(temp_x), 1))
+                        temp_x = np.reshape(np.array(temp_x), (len(temp_x), 1))
+                        temp_y = np.reshape(np.array(temp_y), (len(temp_x), 1))
 
-                    x_y_list = np.concatenate((x_y_list,
-                                               np.concatenate((temp_x, temp_y), axis=1)), axis=0)
+                        x_y_list = np.concatenate((x_y_list,
+                                                   np.concatenate((temp_x, temp_y), axis=1)), axis=0)
 
         feature_tensor = torch.tensor(feature_list)
         torch.save(feature_tensor, os.path.join(save_dir, 'pt_files', sample + '.pt'))
@@ -179,7 +199,7 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
         with h5py.File(h5_file, 'w') as h5f:
             dataset = h5f.create_dataset("coord_array", data=x_y_list)
 
-        heatmap = StitchCoords(h5_file, slideimage, downscale=best_downsampling_level, bg_color=(0, 0, 0),
+        heatmap = StitchCoords(Argument.magnification, h5_file, slideimage, downscale=best_downsampling_level, bg_color=(0, 0, 0),
                                alpha=-1, draw_grid=False, patch_size=patch_size)
         stitch_path = os.path.join(stitch_dir, sample + '_H&E.jpg')
         heatmap.save(stitch_path)
@@ -188,13 +208,13 @@ def Parser_main():
     parser = argparse.ArgumentParser(description="TEA-graph superpatch generation")
     parser.add_argument("--database", default='TCGA', help="Use in the savedir", type=str)
     parser.add_argument("--cancertype", default='KIRC', help="cancer type", type=str)
-    parser.add_argument("--magnification", default = '40x', help = "magnification", type = str)
+    parser.add_argument("--magnification", default = '20x', help = "magnification", type = str)
     parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/", help = 'root_dir', type = str)
     parser.add_argument("--svs_dir", default="/mnt/disk3/svs_data/", help="svs file location", type=str)
-    parser.add_argument("--weight_path", default="/mnt/disk2/DSA_model/epoch-0,loss-0.012936,accuracy-0.094789.pt", help="pretrained weight path")
-    parser.add_argument("--patch_size", default=256, help="crop image size", type=int)
+    parser.add_argument("--weight_path", default="/mnt/disk2/DSA_model/best_ckpt.pth", help="pretrained weight path")
+    parser.add_argument("--patch_size", default=1024, help="crop image size", type=int)
     parser.add_argument("--gpu", default='0', help="gpu device number", type=str)
-    parser.add_argument("--pretrained_model", default = 'Efficientnet', type=str)
+    parser.add_argument("--pretrained_model", default = 'RetCLL', type=str)
     parser.add_argument("--group_num", default = 0, type = int)
     parser.add_argument("--group", default = None , type = int)
     return parser.parse_args()
@@ -261,6 +281,21 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
+    elif Argument.pretrained_model == 'RetCLL':
+        model_ft = RetCLL.resnet50(
+            num_classes=128, mlp=False, two_branch=False, normlinear=True
+        )
+        Argument.transform = transforms.Compose(
+            [
+                transforms.Resize(224),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+        pretext_model = torch.load(weight_path)
+        model_ft.fc = torch.nn.Identity()
+        model_ft.load_state_dict(pretext_model, strict=True)
 
     model_ft = model_ft.to(device)
     model_ft.eval()

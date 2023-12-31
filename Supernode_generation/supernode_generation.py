@@ -226,6 +226,7 @@ def supernode_generation(h5_file, Argument, save_dir):
         new_graph = pos_transfrom(new_graph)
     except:
         print('Polar error')
+        return 0
 
     # Save the data
     h5_output_dir = os.path.join(save_dir, 'h5_files')
@@ -313,7 +314,7 @@ def Parser_main():
     parser.add_argument("--supernode", action='store_true', default=False)
     parser.add_argument("--group_num", default=0, type=int)
     parser.add_argument("--group", default=None, type=int)
-    parser.add_argument("--feature_type", default = 'plus_graph', type = str)
+    parser.add_argument("--feature_type", default = 'HE', type = str)
     parser.add_argument("--svs_dir", default = "/mnt/disk3/svs_data/", type = str, help = 'svs_data_directory for drawing graph')
     return parser.parse_args()
 
