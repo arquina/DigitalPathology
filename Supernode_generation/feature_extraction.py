@@ -72,6 +72,8 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
         temp_patch_list = []
         temp_x = []
         temp_y = []
+        batchsize = 256
+        patch_size = (Argument.patch_size, Argument.patch_size)
 
         # Get the patch the otsu threshold value is lower than 0.75 and extract the feature
         with tqdm(total=num_row * num_col) as pbar_image:
@@ -101,7 +103,6 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                             level = 0
                         elif Argument.magnification == '20x':
                             level = 1
-                        patch_size = (Argument.patch_size, Argument.patch_size)
                         location = (filter_location[0], filter_location[1])
 
                         CutImage = slideimage.read_region(location, level, patch_size)
@@ -109,7 +110,6 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
                         temp_x.append(i * imagesize)
                         temp_y.append(j * imagesize)
                         counter += 1
-                        batchsize = 256
 
                         if counter == batchsize:
                             Dataset = SlidePatchDataset(temp_patch_list, temp_x, temp_y, Argument.transform)
@@ -206,15 +206,15 @@ def feature_extraction(image, model_ft, device, Argument, save_dir):
 
 def Parser_main():
     parser = argparse.ArgumentParser(description="TEA-graph superpatch generation")
-    parser.add_argument("--database", default='TCGA', help="Use in the savedir", type=str)
-    parser.add_argument("--cancertype", default='KIRC', help="cancer type", type=str)
-    parser.add_argument("--magnification", default = '20x', help = "magnification", type = str)
+    parser.add_argument("--database", default='BORAMAE', help="Use in the savedir", type=str)
+    parser.add_argument("--cancertype", default='CCRCC_mutation', help="cancer type", type=str)
+    parser.add_argument("--magnification", default = '40x', help = "magnification", type = str)
     parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/", help = 'root_dir', type = str)
     parser.add_argument("--svs_dir", default="/mnt/disk3/svs_data/", help="svs file location", type=str)
-    parser.add_argument("--weight_path", default="/mnt/disk2/DSA_model/best_ckpt.pth", help="pretrained weight path")
-    parser.add_argument("--patch_size", default=1024, help="crop image size", type=int)
+    parser.add_argument("--weight_path", default="/mnt/disk2/DSA_model/epoch-0,loss-0.012936,accuracy-0.094789.pt", help="pretrained weight path")
+    parser.add_argument("--patch_size", default=256, help="crop image size", type=int)
     parser.add_argument("--gpu", default='0', help="gpu device number", type=str)
-    parser.add_argument("--pretrained_model", default = 'RetCLL', type=str)
+    parser.add_argument("--pretrained_model", default = 'Efficientnet', type=str)
     parser.add_argument("--group_num", default = 0, type = int)
     parser.add_argument("--group", default = None , type = int)
     return parser.parse_args()
@@ -259,9 +259,12 @@ def main():
         os.mkdir(stitch_dir)
 
     svs_file_list = os.listdir(svs_dir)
+    h5_file_list = os.listdir(h5_dir)
 
     svs_sample_list = [svs.split('.svs')[0] for svs in svs_file_list]
-    final_files = [os.path.join(svs_dir, sample + '.svs') for sample in svs_sample_list]
+    h5_sample_list = [s.split('.h5')[0] for s in h5_file_list]
+    processed_sample_list = [s for s in svs_sample_list if s not in h5_sample_list]
+    final_files = [os.path.join(svs_dir, sample + '.svs') for sample in processed_sample_list]
     final_files.sort(key=lambda f: os.stat(f).st_size, reverse=True)
     if Argument.group_num > 1:
         group_list = [i % Argument.group_num for i in range(len(final_files))]

@@ -298,8 +298,8 @@ def supernode_generation(h5_file, Argument, save_dir):
 
 def Parser_main():
     parser = argparse.ArgumentParser(description="TEA-graph superpatch generation")
-    parser.add_argument("--database", default='SNUH', help="Use in the savedir", type=str)
-    parser.add_argument("--cancertype", default='GBM', help="cancer type", type=str)
+    parser.add_argument("--database", default='BORAMAE', help="Use in the savedir", type=str)
+    parser.add_argument("--cancertype", default='CCRCC_mutation', help="cancer type", type=str)
     parser.add_argument("--magnification", default='40x', help='magnification', type=str)
     parser.add_argument("--save_dir", default="/mnt/disk2/TEAgraph_preprocessing/")
     parser.add_argument("--graphdir", default="graphs", help="graph save dir", type=str)
